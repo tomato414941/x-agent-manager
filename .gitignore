@@ -1,0 +1,10 @@
+node_modules/
+
+workspace/state/*.jsonl
+workspace/memory/*.md
+workspace/secrets/*
+logs/*.log
+logs/*.log.err
+logs/sessions.log
+AGENTS.override.md
+CLAUDE.local.md
