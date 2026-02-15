@@ -59,6 +59,7 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 Run them with: `python3 "$X_REPO_ROOT/scripts/<name>.py" --account-dir "$X_ACCOUNT_PATH"`
 
 You can skip, reorder, or create new scripts as you see fit.
+New scripts you create should go in `workspace/tools/`. Useful ones may be promoted to `scripts/` later.
 
 ## Hard constraints
 - Do NOT edit this AGENT_PROMPT.md file
