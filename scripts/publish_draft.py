@@ -7,13 +7,15 @@ Guardrails:
 - Never prints or writes secrets. Reads token from env vars only.
 
 Usage:
-  python3 workspace/tools/publish_draft.py workspace/drafts/20260215_084451_guardrails_stop_mechanism.md
+  python3 scripts/publish_draft.py accounts/agent-x/workspace/drafts/20260215_084451_guardrails_stop_mechanism.md
+  python3 scripts/publish_draft.py --account-dir accounts/agent-x --draft workspace/drafts/20260215_084451_guardrails_stop_mechanism.md
 
 Env:
   X_ACCESS_TOKEN or X_USER_ACCESS_TOKEN (OAuth2 user access token with tweet.write)
   X_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, or BEARER_TOKEN (legacy fallbacks)
   EXPECTED_HOSTNAME (default: autonomous)
   You can also set variables in ~/.secrets/x-agent-manager (exported shell syntax).
+  If --account-dir is given, it also checks ~/.secrets/x-agent-manager/<account-name>.
 """
 
 from __future__ import annotations
@@ -39,43 +41,64 @@ def _utc_now_iso() -> str:
     return _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _load_secrets_file() -> None:
-    candidate = pathlib.Path.home() / ".secrets" / "x-agent-manager"
-    if not candidate.exists():
+def _load_secrets_file(account_dir: pathlib.Path | None = None) -> None:
+    candidates: list[pathlib.Path] = []
+    if env_path := os.environ.get("X_SECRETS_FILE"):
+        candidates.append(pathlib.Path(env_path).expanduser())
+
+    if account_dir is not None:
+        candidates.append(
+            pathlib.Path.home() / ".secrets" / "x-agent-manager" / account_dir.name
+        )
+
+    candidates.append(pathlib.Path.home() / ".secrets" / "x-agent-manager")
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        if not candidate.is_file():
+            continue
+
+        for raw in candidate.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if not line or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key or key in os.environ:
+                continue
+
+            # Support quoted or plain values, and ignore inline comments when possible.
+            try:
+                parts = shlex.split(value)
+            except ValueError:
+                parts = [value]
+            if not parts:
+                continue
+
+            env_value = parts[0]
+            if env_value == "\"\"" or env_value == "''":
+                continue
+            os.environ[key] = env_value
         return
 
-    for raw in candidate.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export "):].strip()
-        if not line or "=" not in line:
-            continue
 
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if not key or key in os.environ:
-            continue
+def _infer_account_root(draft_path: pathlib.Path) -> pathlib.Path:
+    current = draft_path.parent
+    for parent in [draft_path, *current.parents]:
+        if parent.name == "workspace":
+            return parent.parent
 
-        # Support quoted or plain values, and ignore inline comments when possible.
-        try:
-            parts = shlex.split(value)
-        except ValueError:
-            parts = [value]
-        if not parts:
-            continue
-
-        env_value = parts[0]
-        if env_value == "\"\"" or env_value == "''":
-            continue
-        os.environ[key] = env_value
-
-
-def _repo_root() -> pathlib.Path:
-    # .../workspace/tools/publish_draft.py -> repo root is two levels up.
-    return pathlib.Path(__file__).resolve().parents[2]
+    _die(
+        "Could not infer account root from draft path. "
+        "Pass --account-dir or use a path like accounts/<account>/workspace/drafts/..."
+    )
 
 
 def _read_draft_body(draft_path: pathlib.Path) -> str:
@@ -186,21 +209,53 @@ def _append_posts_jsonl(root: pathlib.Path, record: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("draft", help="Path to a draft .md under workspace/drafts/")
+    ap.add_argument("draft", nargs="?", help="Path to a draft .md under workspace/drafts/")
+    ap.add_argument(
+        "--draft",
+        dest="draft_alias",
+        help="Optional positional alternative for the draft path.",
+    )
+    ap.add_argument(
+        "--account-dir",
+        dest="account_dir",
+        help="Optional account root directory (e.g. accounts/agent-x). "
+             "If omitted, inferred from draft path.",
+    )
+    ap.add_argument(
+        "--secrets-file",
+        dest="secrets_file",
+        help="Optional explicit secret file path. "
+             "Takes precedence over inferred ~/.secrets/x-agent-manager/<account> and fallback file.",
+    )
     ap.add_argument(
         "--dry-run",
         action="store_true",
         help="Do all checks and parsing, but do not call the X API.",
     )
     args = ap.parse_args()
+    draft_arg = args.draft_alias or args.draft
+    if not draft_arg:
+        _die("Draft path is required (positional argument or --draft).")
 
     _require_autonomous()
-    _load_secrets_file()
 
-    root = _repo_root()
-    drafts_dir = root / "workspace" / "drafts"
+    draft_path = pathlib.Path(draft_arg).expanduser().resolve()
+    account_root = _infer_account_root(draft_path)
+    if args.account_dir:
+        account_root = pathlib.Path(args.account_dir).expanduser().resolve()
+        if not account_root.name:
+            _die("--account-dir is invalid")
+        if not account_root.is_dir():
+            _die(f"--account-dir not found: {account_root}")
+        if not (account_root / "workspace").is_dir():
+            _die(f"--account-dir missing workspace directory: {account_root}")
 
-    draft_path = pathlib.Path(args.draft).expanduser().resolve()
+    if args.secrets_file:
+        os.environ["X_SECRETS_FILE"] = os.fspath(pathlib.Path(args.secrets_file).expanduser())
+
+    _load_secrets_file(account_dir=account_root)
+
+    drafts_dir = account_root / "workspace" / "drafts"
     if not draft_path.exists():
         _die(f"Draft not found: {draft_path}")
     if not draft_path.is_file():
@@ -208,8 +263,8 @@ def main() -> int:
     if not draft_path.is_relative_to(drafts_dir):
         _die(f"Draft must be under {drafts_dir}: {draft_path}")
 
-    draft_rel = draft_path.relative_to(root).as_posix()
-    _require_approved(root, draft_rel)
+    draft_rel = draft_path.relative_to(account_root).as_posix()
+    _require_approved(account_root, draft_rel)
 
     text = _read_draft_body(draft_path)
     if len(text) > 280:
@@ -235,7 +290,7 @@ def main() -> int:
         "text": text,
         "response": resp,
     }
-    _append_posts_jsonl(root, record)
+    _append_posts_jsonl(account_root, record)
 
     print(f"published: tweet_id={tweet_id} draft={draft_rel}")
     return 0

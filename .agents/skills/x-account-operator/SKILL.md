@@ -17,6 +17,7 @@ description: 複数アカウントで使えるX運用スキル（下書き生成
 - リポジトリのコードや他アカウントのファイルは変更しない
 - 投稿実行は原則しない（下書き生成まで）
   - 例外: 人間が `workspace/human/messages.md` で明示的に承認した場合のみ、X API で投稿してよい
+  - 投稿実行は `scripts/publish_draft.py`（共通スクリプト）を利用してアカウント配下 `workspace` を対象に行う
 
 ## 入力
 - `workspace/human/messages.md`（人間からの返答）
