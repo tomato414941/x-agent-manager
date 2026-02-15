@@ -31,6 +31,7 @@ export X_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 : "${CODEX_MODEL:=}"
 : "${CODEX_USE_SEARCH:=1}"
 : "${CODEX_FULL_AUTO:=1}"
+: "${CODEX_MIN_INTERVAL_SECONDS:=43200}"  # default: 12 hours
 
 # Auto publishing is opt-in. Keep off until you are confident in guardrails.
 : "${AUTO_PUBLISH:=0}"
