@@ -1,6 +1,6 @@
 interface:
-  display_name: Agent-X
-  short_description: Xアカウント運用のために下書きを生成し、学習ループを回す
+  display_name: X Account Operator
+  short_description: 複数アカウント対応でX運用の下書きを生成し、学習ループを回す
   long_description: |
     アカウントディレクトリ配下のローカル状態（workspace/）を読み、X投稿の下書きを生成して workspace/drafts に保存します。
     既存の下書きや過去投稿と重複しないようにし、必要なら Web 検索で裏取りして sources を残します。
