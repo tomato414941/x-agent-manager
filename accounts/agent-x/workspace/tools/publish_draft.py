@@ -13,7 +13,7 @@ Env:
   X_ACCESS_TOKEN or X_USER_ACCESS_TOKEN (OAuth2 user access token with tweet.write)
   X_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, or BEARER_TOKEN (legacy fallbacks)
   EXPECTED_HOSTNAME (default: autonomous)
-  You can also set variables in ~/.secrets/agent-x (exported shell syntax).
+  You can also set variables in ~/.secrets/x-agent-manager (exported shell syntax).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _utc_now_iso() -> str:
 
 
 def _load_secrets_file() -> None:
-    candidate = pathlib.Path.home() / ".secrets" / "agent-x"
+    candidate = pathlib.Path.home() / ".secrets" / "x-agent-manager"
     if not candidate.exists():
         return
 
@@ -144,7 +144,7 @@ def _get_access_token() -> str:
         "Missing access token env var. Set X_ACCESS_TOKEN (recommended) or X_USER_ACCESS_TOKEN "
         "with OAuth2 user context + tweet.write."
         " Also supports X_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, or BEARER_TOKEN."
-        " Tokens can be loaded from ~/.secrets/agent-x if present."
+        " Tokens can be loaded from ~/.secrets/x-agent-manager if present."
     )
 
 

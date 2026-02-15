@@ -191,7 +191,7 @@ def main() -> None:
     auth_code = _wait_for_callback(state)
 
     token = fetch_token(auth_code, verifier)
-    out = save_secret(os.path.expanduser("~/.secrets/agent-x"), token)
+    out = save_secret(os.path.expanduser("~/.secrets/x-agent-manager"), token)
     print(f"保存しました: {out}")
 
 

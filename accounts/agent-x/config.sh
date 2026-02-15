@@ -1,4 +1,4 @@
-SECRETS_FILE="${HOME}/.secrets/agent-x"
+SECRETS_FILE="${HOME}/.secrets/x-agent-manager"
 if [ -f "$SECRETS_FILE" ]; then
   source "$SECRETS_FILE"
 fi
