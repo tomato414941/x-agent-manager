@@ -6,7 +6,7 @@ LOGDIR="$SCRIPT_DIR/logs"
 SESSIONS_LOG="$LOGDIR/sessions.log"
 
 source "$SCRIPT_DIR/config.sh"
-mkdir -p "$LOGDIR" "$SCRIPT_DIR/workspace/drafts" "$SCRIPT_DIR/workspace/state" "$SCRIPT_DIR/workspace/memory" "$SCRIPT_DIR/workspace/human"
+mkdir -p "$LOGDIR" "$SCRIPT_DIR/workspace/drafts" "$SCRIPT_DIR/workspace/tools" "$SCRIPT_DIR/workspace/state" "$SCRIPT_DIR/workspace/memory" "$SCRIPT_DIR/workspace/human"
 
 HUMAN_MESSAGES="$SCRIPT_DIR/workspace/human/messages.md"
 HUMAN_REQUESTS="$SCRIPT_DIR/workspace/human/requests.md"
