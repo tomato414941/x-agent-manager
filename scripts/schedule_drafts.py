@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import json
 import os
 import pathlib
 import sys
@@ -31,6 +32,9 @@ except Exception:  # pragma: no cover
 DEFAULT_TZ = "Asia/Tokyo"
 DEFAULT_SLOTS = "07:30,12:10,20:30"
 DEFAULT_BUFFER_MINUTES = 10
+DEFAULT_MAX_POSTS_PER_DAY = 2
+DEFAULT_MIN_POST_INTERVAL_MINUTES = 180
+DEFAULT_MAX_LATE_MINUTES = 720
 
 
 def _die(msg: str, code: int = 2) -> None:
@@ -52,6 +56,12 @@ def _parse_iso_any(s: str) -> _dt.datetime | None:
         return _dt.datetime.fromisoformat(s)
     except ValueError:
         return None
+
+
+def _as_utc(dt: _dt.datetime) -> _dt.datetime:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_dt.timezone.utc)
+    return dt.astimezone(_dt.timezone.utc)
 
 
 def _infer_account_root(account_dir: str | None) -> pathlib.Path:
@@ -94,6 +104,57 @@ def _read_frontmatter(path: pathlib.Path) -> tuple[dict[str, str], list[str]]:
         fm[key] = val
 
     return fm, lines
+
+
+def _read_jsonl(path: pathlib.Path) -> list[dict]:
+    if not path.exists() or not path.is_file():
+        return []
+    out: list[dict] = []
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            out.append(obj)
+    return out
+
+
+def _published_drafts_set(account_root: pathlib.Path) -> set[str]:
+    posts_path = account_root / "workspace" / "state" / "posts.jsonl"
+    rows = _read_jsonl(posts_path)
+    out: set[str] = set()
+    for row in rows:
+        p = row.get("draft_path")
+        if isinstance(p, str) and p:
+            out.add(p)
+    return out
+
+
+def _post_times(account_root: pathlib.Path, now_utc: _dt.datetime) -> tuple[_dt.datetime | None, int, _dt.datetime | None]:
+    posts_path = account_root / "workspace" / "state" / "posts.jsonl"
+    rows = _read_jsonl(posts_path)
+    times: list[_dt.datetime] = []
+    for row in rows:
+        ts = row.get("published_at")
+        if not isinstance(ts, str):
+            continue
+        dt = _parse_iso_any(ts)
+        if dt is None:
+            continue
+        times.append(_as_utc(dt))
+    if not times:
+        return None, 0, None
+
+    last_post = max(times)
+    times_24h = [t for t in times if (now_utc - t) <= _dt.timedelta(hours=24)]
+    if not times_24h:
+        return last_post, 0, None
+    oldest_24h = min(times_24h)
+    return last_post, len(times_24h), oldest_24h
 
 
 def _replace_or_insert_frontmatter(
@@ -182,17 +243,15 @@ def _get_tz(name: str) -> _dt.tzinfo:
 
 
 def _next_slot_utc(
-    now_utc: _dt.datetime,
+    earliest_utc: _dt.datetime,
     tz_name: str,
     slots: list[tuple[int, int]],
-    buffer_minutes: int,
 ) -> _dt.datetime:
-    if now_utc.tzinfo is None:
-        now_utc = now_utc.replace(tzinfo=_dt.timezone.utc)
+    if earliest_utc.tzinfo is None:
+        earliest_utc = earliest_utc.replace(tzinfo=_dt.timezone.utc)
 
     tz = _get_tz(tz_name)
-    local_now = now_utc.astimezone(tz)
-    earliest_local = local_now + _dt.timedelta(minutes=max(0, buffer_minutes))
+    earliest_local = earliest_utc.astimezone(tz)
 
     # Search the next 7 days for the earliest slot >= earliest_local.
     for day_offset in range(0, 8):
@@ -243,68 +302,122 @@ def main() -> int:
     if not slots:
         _die(f"Invalid slots: {args.slots}")
 
+    max_per_day = int(os.environ.get("MAX_POSTS_PER_DAY", str(DEFAULT_MAX_POSTS_PER_DAY)))
+    min_interval_min = int(os.environ.get("MIN_POST_INTERVAL_MINUTES", str(DEFAULT_MIN_POST_INTERVAL_MINUTES)))
+    max_late_min = int(os.environ.get("MAX_LATE_MINUTES", str(DEFAULT_MAX_LATE_MINUTES)))
+
+    last_post_at, count_24h, oldest_24h = _post_times(account_root, now_utc)
+    earliest_publish_utc = now_utc
+    if last_post_at is not None:
+        earliest_publish_utc = max(
+            earliest_publish_utc,
+            last_post_at + _dt.timedelta(minutes=max(0, min_interval_min)),
+        )
+    if max_per_day > 0 and count_24h >= max_per_day and oldest_24h is not None:
+        earliest_publish_utc = max(earliest_publish_utc, oldest_24h + _dt.timedelta(hours=24))
+
+    earliest_schedule_utc = max(
+        earliest_publish_utc,
+        now_utc + _dt.timedelta(minutes=max(0, args.buffer_minutes)),
+    )
+
+    published_drafts = _published_drafts_set(account_root)
     paths = sorted(drafts_dir.glob("*.md"))
 
     queued_future: list[pathlib.Path] = []
     broken_auto: list[pathlib.Path] = []
+    active_auto: list[pathlib.Path] = []
 
     for path in paths:
         fm, _ = _read_frontmatter(path)
         if not _is_truthy(fm.get("auto_publish")):
             continue
+        try:
+            rel = path.relative_to(account_root).as_posix()
+        except ValueError:
+            rel = ""
+        if rel and rel in published_drafts:
+            fm2, lines2 = _read_frontmatter(path)
+            new_lines = _replace_or_insert_frontmatter(
+                lines2,
+                {"auto_publish": "false", "scheduled_at": "\"\""},
+            )
+            path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+            continue
+
+        active_auto.append(path)
         scheduled = _parse_iso_any(fm.get("scheduled_at", ""))
         if scheduled is None:
             broken_auto.append(path)
             continue
-        if scheduled.tzinfo is None:
-            scheduled = scheduled.replace(tzinfo=_dt.timezone.utc)
-        if scheduled.astimezone(_dt.timezone.utc) > now_utc:
+        scheduled_utc = _as_utc(scheduled)
+        if scheduled_utc > now_utc:
             queued_future.append(path)
 
-    # If there is already a future scheduled auto draft, do nothing.
-    # But if there are broken auto drafts, disarm them to avoid confusion.
-    if queued_future:
-        if broken_auto:
-            for path in broken_auto:
-                fm, lines = _read_frontmatter(path)
-                new_lines = _replace_or_insert_frontmatter(lines, {"auto_publish": "false"})
-                path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-            print(f"schedule: already queued draft={queued_future[0].name} (disarmed {len(broken_auto)} broken auto drafts)")
-            return 0
-        print(f"schedule: already queued draft={queued_future[0].name}")
+    # If multiple drafts are marked auto_publish, keep only one (earliest scheduled if possible).
+    if len(active_auto) > 1:
+        def _sort_key(p: pathlib.Path) -> tuple[int, str]:
+            fm, _ = _read_frontmatter(p)
+            dt = _parse_iso_any(fm.get("scheduled_at", ""))
+            if dt is None:
+                return (0, p.name)
+            return (1, _as_utc(dt).isoformat())
+
+        active_auto.sort(key=_sort_key)
+        keep = active_auto[0]
+        for extra in active_auto[1:]:
+            fm, lines = _read_frontmatter(extra)
+            new_lines = _replace_or_insert_frontmatter(lines, {"auto_publish": "false", "scheduled_at": "\"\""})
+            extra.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        active_auto = [keep]
+
+    # If there is an active auto draft, repair/reschedule it and return.
+    if active_auto:
+        path = active_auto[0]
+        fm, lines = _read_frontmatter(path)
+        scheduled = _parse_iso_any(fm.get("scheduled_at", ""))
+        scheduled_utc = _as_utc(scheduled) if scheduled is not None else None
+
+        # If it is due and can be published now, leave it for auto_publish.py.
+        if scheduled_utc is not None:
+            too_old = (now_utc - scheduled_utc) > _dt.timedelta(minutes=max(0, max_late_min))
+            can_publish_now = earliest_publish_utc <= now_utc
+            if scheduled_utc <= now_utc and (not too_old) and can_publish_now:
+                print(f"schedule: leaving due draft={path.name}")
+                return 0
+
+        # Otherwise, reschedule to the next allowed slot.
+        target_utc = _next_slot_utc(earliest_schedule_utc, args.tz, slots)
+        target_str = target_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_lines = _replace_or_insert_frontmatter(
+            lines,
+            {"scheduled_at": f"\"{target_str}\"", "auto_publish": "true"},
+        )
+        path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        print(f"schedule: rescheduled draft={path.name} scheduled_at={target_str} tz={args.tz}")
         return 0
 
     # Pick a draft to schedule.
     pick: pathlib.Path | None = None
-    pick_fm: dict[str, str] = {}
     pick_lines: list[str] = []
 
-    # Prefer fixing a broken auto draft (auto_publish=true but missing scheduled_at).
-    if broken_auto:
-        pick = broken_auto[0]
-        pick_fm, pick_lines = _read_frontmatter(pick)
-    else:
-        for path in paths:
-            fm, lines = _read_frontmatter(path)
-            if _is_truthy(fm.get("auto_publish")):
-                continue
-            if fm.get("scheduled_at"):
-                continue
-            pick = path
-            pick_fm = fm
-            pick_lines = lines
-            break
+    for path in paths:
+        fm, lines = _read_frontmatter(path)
+        if not lines or lines[0].strip() != "---":
+            continue
+        if _is_truthy(fm.get("auto_publish")):
+            continue
+        if fm.get("scheduled_at"):
+            continue
+        pick = path
+        pick_lines = lines
+        break
 
     if pick is None:
         print("schedule: no unscheduled drafts")
         return 0
 
-    # If the pick has no frontmatter, avoid altering it (drafts should have frontmatter).
-    if not pick_lines or pick_lines[0].strip() != "---":
-        print(f"schedule: skipped draft without frontmatter: {pick.name}")
-        return 0
-
-    scheduled_utc = _next_slot_utc(now_utc, args.tz, slots, args.buffer_minutes)
+    scheduled_utc = _next_slot_utc(earliest_schedule_utc, args.tz, slots)
     scheduled_str = scheduled_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     updates = {
