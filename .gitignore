@@ -1,10 +1,14 @@
 node_modules/
 
-workspace/state/*.jsonl
-workspace/memory/*.md
-workspace/secrets/*
-logs/*.log
-logs/*.log.err
-logs/sessions.log
+*/workspace/state/*.jsonl
+*/workspace/memory/*.md
+*/workspace/memory/archive/*
+*/workspace/drafts/*
+*/workspace/human/*
+*/workspace/secrets/*
+*/logs/*.log
+*/logs/*.log.err
+*/logs/*.last_message.txt
+*/logs/sessions.log
 AGENTS.override.md
 CLAUDE.local.md

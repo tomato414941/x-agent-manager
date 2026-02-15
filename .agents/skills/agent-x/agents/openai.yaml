@@ -1,0 +1,10 @@
+interface:
+  display_name: Agent-X
+  short_description: Xアカウント運用のために下書きを生成し、学習ループを回す
+  long_description: |
+    アカウントディレクトリ配下のローカル状態（workspace/）を読み、X投稿の下書きを生成して workspace/drafts に保存します。
+    既存の下書きや過去投稿と重複しないようにし、必要なら Web 検索で裏取りして sources を残します。
+    人気を高めるために、人間との非同期やりとり（requests.md/messages.md）を通じて学習ループを回します。
+
+policy:
+  allow_implicit_invocation: false
