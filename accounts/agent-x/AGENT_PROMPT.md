@@ -16,7 +16,7 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 - `session.sh` loads secrets, ensures workspace/ exists, then starts you via `codex exec`
 - `config.sh` sets env vars: `$X_ACCOUNT_PATH`, `$X_REPO_ROOT`, scheduling params (`$SCHEDULE_TZ`, `$SCHEDULE_SLOTS`, `$MAX_POSTS_PER_DAY`, etc.)
 - Each session has a `$TIMEOUT_MINUTES` (default 60) time limit
-- You can read and modify config.sh to tune parameters between sessions
+- Do not modify run.sh, session.sh, or config.sh directly. If you want changes, propose them in workspace/human/requests.md
 
 ## What you do (use your own judgment each session)
 
