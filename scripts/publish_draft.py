@@ -4,7 +4,7 @@
 Guardrails:
 - Refuses to run unless hostname == 'autonomous' (configurable via EXPECTED_HOSTNAME env).
 - Refuses to publish unless the draft path is explicitly present in workspace/human/messages.md.
-- Never prints or writes secrets. Reads token from env vars only.
+- Never prints secrets. Reads token from env vars, and can refresh/persist tokens on 401 (if configured).
 - Auto publish mode (opt-in): requires AUTO_PUBLISH=1 and draft frontmatter `auto_publish: true` + due `scheduled_at`.
 
 Usage:
@@ -13,6 +13,8 @@ Usage:
 
 Env:
   X_ACCESS_TOKEN or X_USER_ACCESS_TOKEN (OAuth2 user access token with tweet.write)
+  X_REFRESH_TOKEN (optional, required for auto refresh)
+  X_CLIENT_ID (optional, required for auto refresh)
   X_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, or BEARER_TOKEN (legacy fallbacks)
   EXPECTED_HOSTNAME (default: autonomous)
   You can also set variables in:
@@ -38,7 +40,9 @@ import pathlib
 import socket
 import sys
 import shlex
+import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -46,6 +50,14 @@ DEFAULT_SECRETS_ROOT = pathlib.Path.home() / ".secrets" / "x-agent-manager"
 DEFAULT_MAX_POSTS_PER_DAY = 2
 DEFAULT_MIN_POST_INTERVAL_MINUTES = 180
 DEFAULT_MAX_LATE_MINUTES = 720
+
+
+class _UnauthorizedError(Exception):
+    def __init__(self, title: str, detail: str, body: str) -> None:
+        self.title = title
+        self.detail = detail
+        self.body = body
+        super().__init__((f"{title} {detail}".strip() or body)[:200])
 
 
 def _die(msg: str, code: int = 2) -> None:
@@ -311,6 +323,68 @@ def _extract_error_detail(body: str) -> tuple[str, str]:
     return data.get("title", ""), data.get("detail", "") or str(data)
 
 
+def _resolve_secrets_write_path(
+    account_dir: pathlib.Path | None,
+    secrets_file: str | None,
+    secrets_root: pathlib.Path,
+) -> pathlib.Path:
+    env_path = os.environ.get("X_SECRETS_FILE")
+    if secrets_file:
+        return pathlib.Path(secrets_file).expanduser()
+    if env_path:
+        return pathlib.Path(env_path).expanduser()
+    if account_dir is not None:
+        if secrets_root.is_file():
+            return secrets_root
+        return secrets_root / account_dir.name
+    if secrets_root.is_file():
+        return secrets_root
+    return secrets_root / "config"
+
+
+def _persist_env_exports(path: pathlib.Path, updates: dict[str, str]) -> None:
+    # Keep the file format shell-friendly: `export KEY="VALUE"`.
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _line_key(line: str) -> str | None:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            return None
+        if s.startswith("export "):
+            s = s[len("export ") :].lstrip()
+        if "=" not in s:
+            return None
+        key = s.split("=", 1)[0].strip()
+        return key or None
+
+    existing_lines: list[str] = []
+    if path.exists() and path.is_file():
+        existing_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    out_lines: list[str] = []
+    written: set[str] = set()
+    for line in existing_lines:
+        key = _line_key(line)
+        if key and key in updates:
+            out_lines.append(f'export {key}="{updates[key]}"')
+            written.add(key)
+        else:
+            out_lines.append(line)
+
+    for key, value in updates.items():
+        if key not in written:
+            out_lines.append(f'export {key}="{value}"')
+
+    tmp_dir = path.parent
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=tmp_dir, delete=False) as f:
+        tmp_path = pathlib.Path(f.name)
+        f.write("\n".join(out_lines).rstrip("\n") + "\n")
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, path)
+    os.chmod(path, 0o600)
+
+
 def _get_access_token() -> str:
     for key in (
         "X_ACCESS_TOKEN",
@@ -329,6 +403,31 @@ def _get_access_token() -> str:
         " Tokens can be loaded from ~/.secrets/x-agent-manager/config or "
         "~/.secrets/x-agent-manager/<account-name>."
     )
+
+
+def _refresh_access_token(refresh_token: str, client_id: str) -> dict:
+    data = urllib.parse.urlencode(
+        {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request("https://api.x.com/2/oauth2/token", data=data, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        title, detail = _extract_error_detail(body)
+        _die(
+            f"X OAuth token refresh failed HTTP {e.code}: {title} {detail}".strip() or body,
+            code=1,
+        )
+    except urllib.error.URLError as e:
+        _die(f"X OAuth token refresh connection error: {e}", code=1)
 
 
 def _require_auto_mode(root: pathlib.Path, draft_path: pathlib.Path) -> None:
@@ -372,6 +471,8 @@ def _post_tweet(text: str, token: str) -> dict:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         title, detail = _extract_error_detail(body)
+        if e.code == 401:
+            raise _UnauthorizedError(title or "Unauthorized", detail or "", body)
         if e.code == 403 and title == "Unsupported Authentication":
             _die(
                 "X API error HTTP 403: Unsupported Authentication. "
@@ -480,7 +581,43 @@ def main() -> int:
         return 0
 
     token = _get_access_token()
-    resp = _post_tweet(text=text, token=token)
+    try:
+        resp = _post_tweet(text=text, token=token)
+    except _UnauthorizedError as exc:
+        refresh_token = os.environ.get("X_REFRESH_TOKEN", "").strip()
+        client_id = os.environ.get("X_CLIENT_ID", "").strip()
+        if not refresh_token:
+            _die(
+                "X API returned 401 Unauthorized, and X_REFRESH_TOKEN is missing. "
+                "Re-run scripts/get_x_user_token.py to obtain a fresh token pair.",
+                code=1,
+            )
+        if not client_id:
+            _die(
+                "X API returned 401 Unauthorized, and X_CLIENT_ID is missing (required for refresh_token). "
+                "Add `export X_CLIENT_ID=...` to ~/.secrets/x-agent-manager/config.",
+                code=1,
+            )
+
+        refreshed = _refresh_access_token(refresh_token=refresh_token, client_id=client_id)
+        new_access = refreshed.get("access_token")
+        new_refresh = refreshed.get("refresh_token") or refresh_token
+        if not isinstance(new_access, str) or not new_access:
+            _die("Token refresh succeeded but no access_token was returned.", code=1)
+
+        os.environ["X_ACCESS_TOKEN"] = new_access
+        os.environ["X_REFRESH_TOKEN"] = new_refresh
+
+        # Persist refreshed tokens for long-running automation (do not print values).
+        secrets_root = pathlib.Path(args.secrets_root).expanduser()
+        out_path = _resolve_secrets_write_path(account_root, args.secrets_file, secrets_root)
+        _persist_env_exports(out_path, {"X_ACCESS_TOKEN": new_access, "X_REFRESH_TOKEN": new_refresh})
+
+        token = new_access
+        try:
+            resp = _post_tweet(text=text, token=token)
+        except _UnauthorizedError:
+            _die(f"X API error HTTP 401: {exc.title} {exc.detail}".strip(), code=1)
 
     tweet_id = (
         resp.get("data", {}).get("id")
