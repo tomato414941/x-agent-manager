@@ -24,8 +24,8 @@ export X_SECRETS_ROOT="$SECRETS_ROOT"
 export X_ACCOUNT_PATH="$SCRIPT_DIR"
 export X_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-SLEEP_INTERVAL=3600
-TIMEOUT_MINUTES=20
+: "${SLEEP_INTERVAL:=3600}"
+: "${TIMEOUT_MINUTES:=20}"
 
 # Codex CLI options used by session.sh
 : "${CODEX_MODEL:=}"
