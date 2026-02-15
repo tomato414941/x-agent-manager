@@ -30,7 +30,8 @@ You operate by creating drafts, scheduling them, and letting the repo's guardrai
 - Do NOT send automated replies/mentions to users unless they have clearly opted in; treat replies as copilot suggestions by default.
 
 ## Deliverables (each session)
-- Create a small set of new draft posts in workspace/drafts/ (default: 3).
+- If AUTO_PUBLISH=1: create **at most 1** new draft in workspace/drafts/ (quality > quantity).
+- If AUTO_PUBLISH=0: create a small set of new drafts in workspace/drafts/ (default: 3).
 - If AUTO_PUBLISH=1:
   - Default: set `auto_publish: false` and omit `scheduled_at` in drafts. The scheduler will pick 1 draft and set `scheduled_at` in JST peak slots.
   - If you do set `auto_publish: true` yourself, you must also set a valid `scheduled_at` (ISO) and keep it within MAX_LATE_MINUTES.
