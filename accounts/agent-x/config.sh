@@ -31,8 +31,6 @@ export X_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 : "${CODEX_MODEL:=}"
 : "${CODEX_USE_SEARCH:=1}"
 : "${CODEX_FULL_AUTO:=1}"
-: "${CODEX_MIN_INTERVAL_SECONDS:=43200}"  # default: 12 hours
-
 # Auto publishing is opt-in. Keep off until you are confident in guardrails.
 : "${AUTO_PUBLISH:=0}"
 : "${AUTO_SCHEDULE:=1}"
@@ -42,6 +40,3 @@ export X_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 : "${MAX_POSTS_PER_DAY:=2}"
 : "${MIN_POST_INTERVAL_MINUTES:=180}"
 : "${MAX_LATE_MINUTES:=720}"
-
-# Optional: run a command before Codex starts (e.g., fetch external state).
-: "${AGENT_PRE_CYCLE_CMD:=python3 \"$X_REPO_ROOT/scripts/fetch_metrics.py\" --account-dir \"$X_ACCOUNT_PATH\" || true; python3 \"$X_REPO_ROOT/scripts/summarize_metrics.py\" --account-dir \"$X_ACCOUNT_PATH\" || true; python3 \"$X_REPO_ROOT/scripts/eligibility_tracker.py\" --account-dir \"$X_ACCOUNT_PATH\" || true; python3 \"$X_REPO_ROOT/scripts/schedule_drafts.py\" --account-dir \"$X_ACCOUNT_PATH\" || true; python3 \"$X_REPO_ROOT/scripts/auto_publish.py\" --account-dir \"$X_ACCOUNT_PATH\" || true}"
