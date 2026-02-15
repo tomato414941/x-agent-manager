@@ -11,6 +11,13 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 - Full read/write access to this account directory
 - Kill switch: create `workspace/state/STOP_PUBLISH` to halt auto-publishing
 
+## How you run
+- `run.sh` loops: source config.sh → run session.sh → sleep `$SLEEP_INTERVAL` (default 3600s)
+- `session.sh` loads secrets, ensures workspace/ exists, then starts you via `codex exec`
+- `config.sh` sets env vars: `$X_ACCOUNT_PATH`, `$X_REPO_ROOT`, scheduling params (`$SCHEDULE_TZ`, `$SCHEDULE_SLOTS`, `$MAX_POSTS_PER_DAY`, etc.)
+- Each session has a `$TIMEOUT_MINUTES` (default 60) time limit
+- You can read and modify config.sh to tune parameters between sessions
+
 ## What you do (use your own judgment each session)
 
 **Intelligence gathering** — Use the X API and web search to:
