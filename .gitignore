@@ -1,5 +1,8 @@
 node_modules/
 
+__pycache__/
+*.pyc
+
 */workspace/state/*.jsonl
 */workspace/memory/*.md
 */workspace/memory/archive/*

@@ -21,6 +21,8 @@ fi
 
 export X_ACCOUNT_DIR="$ACCOUNT_NAME"
 export X_SECRETS_ROOT="$SECRETS_ROOT"
+export X_ACCOUNT_PATH="$SCRIPT_DIR"
+export X_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 SLEEP_INTERVAL=3600
 TIMEOUT_MINUTES=20
@@ -31,4 +33,4 @@ TIMEOUT_MINUTES=20
 : "${CODEX_FULL_AUTO:=1}"
 
 # Optional: run a command before Codex starts (e.g., fetch external state).
-: "${AGENT_PRE_CYCLE_CMD:=}"
+: "${AGENT_PRE_CYCLE_CMD:=python3 \"$X_REPO_ROOT/scripts/fetch_metrics.py\" --account-dir \"$X_ACCOUNT_PATH\" && python3 \"$X_REPO_ROOT/scripts/eligibility_tracker.py\" --account-dir \"$X_ACCOUNT_PATH\"}"
