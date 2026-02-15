@@ -12,19 +12,20 @@ import pathlib
 import secrets
 import shlex
 import threading
+import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote_via, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8787/callback"
 DEFAULT_SCOPES = "tweet.read tweet.write users.read offline.access"
-DEFAULT_SECRETS_FILE = os.path.expanduser("~/.secrets/x-agent-manager")
+DEFAULT_SECRETS_ROOT = pathlib.Path.home() / ".secrets" / "x-agent-manager"
 
 
 def _die(msg: str, code: int = 2) -> None:
-    print(msg, file=__import__("sys").stderr)
+    print(msg, file=sys.stderr)
     raise SystemExit(code)
 
 
@@ -60,18 +61,55 @@ def _load_env_file(path: pathlib.Path) -> None:
         os.environ[key] = env_value
 
 
-def _load_secrets_file(account_dir: pathlib.Path | None, secrets_file: str | None) -> None:
+def _normalize_secret_candidates(
+    account_dir: pathlib.Path | None,
+    secrets_file: str | None,
+    secrets_root: pathlib.Path,
+) -> list[pathlib.Path]:
+    seen: set[pathlib.Path] = set()
     candidates: list[pathlib.Path] = []
+
+    def _append(path: pathlib.Path) -> None:
+        if path in seen:
+            return
+        seen.add(path)
+        candidates.append(path)
+
+    env_path = os.environ.get("X_SECRETS_FILE")
+
     if secrets_file:
-        candidates.append(pathlib.Path(secrets_file).expanduser())
+        _append(pathlib.Path(secrets_file).expanduser())
+    elif env_path:
+        _append(pathlib.Path(env_path).expanduser())
 
     if account_dir is not None:
-        candidates.append(pathlib.Path.home() / ".secrets" / "x-agent-manager" / account_dir.name)
+        account_path = secrets_root / account_dir.name
+        _append(account_path)
 
-    candidates.append(pathlib.Path.home() / ".secrets" / "x-agent-manager")
+    if secrets_root.is_file():
+        _append(secrets_root)
+    else:
+        _append(secrets_root / "config")
+
+    return candidates
+
+
+def _load_secrets_file(account_dir: pathlib.Path | None, secrets_file: str | None, secrets_root: pathlib.Path) -> None:
+    candidates = _normalize_secret_candidates(account_dir, secrets_file, secrets_root)
 
     for candidate in candidates:
         _load_env_file(candidate)
+
+
+def _resolve_account_dir(account_dir: str | None) -> pathlib.Path | None:
+    if account_dir:
+        return pathlib.Path(account_dir).expanduser()
+
+    env_account_dir = os.environ.get("X_ACCOUNT_DIR")
+    if env_account_dir:
+        return pathlib.Path(env_account_dir).expanduser()
+
+    return None
 
 
 def _build_code_verifier() -> str:
@@ -93,7 +131,7 @@ def _build_auth_url(verifier: str, state: str, client_id: str, redirect_uri: str
         "code_challenge": challenge,
         "code_challenge_method": "S256",
     }
-    return "https://x.com/i/oauth2/authorize?" + urlencode(params, quote_via=quote_via)
+    return "https://x.com/i/oauth2/authorize?" + urlencode(params)
 
 
 def parse_auth_code(raw: str) -> str:
@@ -249,16 +287,30 @@ def _read_code_from_stdin() -> str:
     return auth_code
 
 
-def _resolve_output_path(account_dir: pathlib.Path | None, explicit: str | None) -> str:
+def _resolve_output_path(
+    account_dir: pathlib.Path | None,
+    explicit: str | None,
+    secrets_root: pathlib.Path,
+) -> str:
     if explicit:
         return os.path.expanduser(explicit)
     if account_dir is not None:
-        return str(pathlib.Path.home() / ".secrets" / "x-agent-manager" / account_dir.name)
-    return DEFAULT_SECRETS_FILE
+        if secrets_root.is_file():
+            print(
+                f"warning: '{secrets_root}' is a file. "
+                "Saving token to shared secret file for compatibility.",
+                file=sys.stderr,
+            )
+            return str(secrets_root)
+        return str(secrets_root / account_dir.name)
+    if secrets_root.is_file():
+        return str(secrets_root)
+    return str(secrets_root / "config")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--secrets-root", default=str(DEFAULT_SECRETS_ROOT), help="Root secrets location")
     ap.add_argument("--client-id", default=os.environ.get("X_CLIENT_ID", ""), help="OAuth client id (or X_CLIENT_ID env)")
     ap.add_argument(
         "--redirect-uri",
@@ -270,12 +322,17 @@ def main() -> None:
         default=os.environ.get("X_SCOPES", DEFAULT_SCOPES),
         help="space-separated OAuth scopes",
     )
-    ap.add_argument("--account-dir", dest="account_dir", help="Optional account directory name")
+    ap.add_argument(
+        "--account-dir",
+        dest="account_dir",
+        help="Optional account directory name (defaults to X_ACCOUNT_DIR).",
+    )
     ap.add_argument("--secrets-file", dest="secrets_file", help="Explicit secret output file path")
     args = ap.parse_args()
 
-    account_dir = pathlib.Path(args.account_dir).expanduser() if args.account_dir else None
-    _load_secrets_file(account_dir, args.secrets_file)
+    account_dir = _resolve_account_dir(args.account_dir)
+    secrets_root = pathlib.Path(args.secrets_root).expanduser()
+    _load_secrets_file(account_dir, args.secrets_file, secrets_root)
 
     client_id = args.client_id or os.environ.get("X_CLIENT_ID")
     if not client_id:
@@ -296,7 +353,7 @@ def main() -> None:
     auth_code = _wait_for_callback(state, redirect_uri)
 
     token = fetch_token(auth_code, verifier, client_id, redirect_uri)
-    out = save_secret(_resolve_output_path(account_dir, args.secrets_file), token)
+    out = save_secret(_resolve_output_path(account_dir, args.secrets_file, secrets_root), token)
     print(f"保存しました: {out}")
 
 

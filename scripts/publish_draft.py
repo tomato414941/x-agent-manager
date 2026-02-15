@@ -14,8 +14,9 @@ Env:
   X_ACCESS_TOKEN or X_USER_ACCESS_TOKEN (OAuth2 user access token with tweet.write)
   X_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, or BEARER_TOKEN (legacy fallbacks)
   EXPECTED_HOSTNAME (default: autonomous)
-  You can also set variables in ~/.secrets/x-agent-manager (exported shell syntax).
-  If --account-dir is given, it also checks ~/.secrets/x-agent-manager/<account-name>.
+  You can also set variables in:
+  - ~/.secrets/x-agent-manager/config (app-level config, exported shell syntax)
+  - ~/.secrets/x-agent-manager/<account-name> (account-specific user token file)
 """
 
 from __future__ import annotations
@@ -32,6 +33,9 @@ import urllib.error
 import urllib.request
 
 
+DEFAULT_SECRETS_ROOT = pathlib.Path.home() / ".secrets" / "x-agent-manager"
+
+
 def _die(msg: str, code: int = 2) -> None:
     print(msg, file=sys.stderr)
     raise SystemExit(code)
@@ -41,17 +45,44 @@ def _utc_now_iso() -> str:
     return _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _load_secrets_file(account_dir: pathlib.Path | None = None) -> None:
+def _normalize_secret_candidates(
+    account_dir: pathlib.Path | None,
+    secrets_file: str | None,
+    secrets_root: pathlib.Path,
+) -> list[pathlib.Path]:
+    seen: set[pathlib.Path] = set()
     candidates: list[pathlib.Path] = []
-    if env_path := os.environ.get("X_SECRETS_FILE"):
-        candidates.append(pathlib.Path(env_path).expanduser())
 
+    def _append(path: pathlib.Path) -> None:
+        if path in seen:
+            return
+        seen.add(path)
+        candidates.append(path)
+
+    env_path = os.environ.get("X_SECRETS_FILE")
+
+    if secrets_file:
+        _append(pathlib.Path(secrets_file).expanduser())
+    elif env_path:
+        _append(pathlib.Path(env_path).expanduser())
     if account_dir is not None:
-        candidates.append(
-            pathlib.Path.home() / ".secrets" / "x-agent-manager" / account_dir.name
-        )
+        _append(secrets_root / account_dir.name)
 
-    candidates.append(pathlib.Path.home() / ".secrets" / "x-agent-manager")
+    if secrets_root.is_file():
+        _append(secrets_root)
+    else:
+        _append(secrets_root / "config")
+
+    return candidates
+
+
+def _load_secrets_file(
+    account_dir: pathlib.Path | None = None,
+    secrets_file: str | None = None,
+    secrets_root: pathlib.Path | None = None,
+) -> None:
+    root = secrets_root or DEFAULT_SECRETS_ROOT
+    candidates = _normalize_secret_candidates(account_dir, secrets_file, root)
 
     for candidate in candidates:
         if not candidate.exists():
@@ -86,8 +117,6 @@ def _load_secrets_file(account_dir: pathlib.Path | None = None) -> None:
             if env_value == "\"\"" or env_value == "''":
                 continue
             os.environ[key] = env_value
-        return
-
 
 def _infer_account_root(draft_path: pathlib.Path) -> pathlib.Path:
     current = draft_path.parent
@@ -167,7 +196,8 @@ def _get_access_token() -> str:
         "Missing access token env var. Set X_ACCESS_TOKEN (recommended) or X_USER_ACCESS_TOKEN "
         "with OAuth2 user context + tweet.write."
         " Also supports X_BEARER_TOKEN, TWITTER_ACCESS_TOKEN, or BEARER_TOKEN."
-        " Tokens can be loaded from ~/.secrets/x-agent-manager if present."
+        " Tokens can be loaded from ~/.secrets/x-agent-manager/config or "
+        "~/.secrets/x-agent-manager/<account-name>."
     )
 
 
@@ -222,6 +252,12 @@ def main() -> int:
              "If omitted, inferred from draft path.",
     )
     ap.add_argument(
+        "--secrets-root",
+        dest="secrets_root",
+        default=str(DEFAULT_SECRETS_ROOT),
+        help="Secrets root directory/file path (default: ~/.secrets/x-agent-manager).",
+    )
+    ap.add_argument(
         "--secrets-file",
         dest="secrets_file",
         help="Optional explicit secret file path. "
@@ -250,10 +286,11 @@ def main() -> int:
         if not (account_root / "workspace").is_dir():
             _die(f"--account-dir missing workspace directory: {account_root}")
 
-    if args.secrets_file:
-        os.environ["X_SECRETS_FILE"] = os.fspath(pathlib.Path(args.secrets_file).expanduser())
-
-    _load_secrets_file(account_dir=account_root)
+    _load_secrets_file(
+        account_dir=account_root,
+        secrets_file=args.secrets_file,
+        secrets_root=pathlib.Path(args.secrets_root).expanduser(),
+    )
 
     drafts_dir = account_root / "workspace" / "drafts"
     if not draft_path.exists():
