@@ -5,6 +5,7 @@ Guardrails:
 - Refuses to run unless hostname == 'autonomous' (configurable via EXPECTED_HOSTNAME env).
 - Refuses to publish unless the draft path is explicitly present in workspace/human/messages.md.
 - Never prints or writes secrets. Reads token from env vars only.
+- Auto publish mode (opt-in): requires AUTO_PUBLISH=1 and draft frontmatter `auto_publish: true` + due `scheduled_at`.
 
 Usage:
   python3 scripts/publish_draft.py accounts/agent-x/workspace/drafts/20260215_084451_guardrails_stop_mechanism.md
@@ -17,12 +18,20 @@ Env:
   You can also set variables in:
   - ~/.secrets/x-agent-manager/config (app-level config, exported shell syntax)
   - ~/.secrets/x-agent-manager/<account-name> (account-specific user token file)
+
+Auto publish env (optional):
+  AUTO_PUBLISH=1 enables auto publishing.
+  STOP_PUBLISH=1 stops publishing (kill switch).
+  MAX_POSTS_PER_DAY (default: 2)
+  MIN_POST_INTERVAL_MINUTES (default: 180)
+  MAX_LATE_MINUTES (default: 720)  # skip drafts scheduled too far in the past
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
 import json
 import os
 import pathlib
@@ -34,6 +43,9 @@ import urllib.request
 
 
 DEFAULT_SECRETS_ROOT = pathlib.Path.home() / ".secrets" / "x-agent-manager"
+DEFAULT_MAX_POSTS_PER_DAY = 2
+DEFAULT_MIN_POST_INTERVAL_MINUTES = 180
+DEFAULT_MAX_LATE_MINUTES = 720
 
 
 def _die(msg: str, code: int = 2) -> None:
@@ -43,6 +55,22 @@ def _die(msg: str, code: int = 2) -> None:
 
 def _utc_now_iso() -> str:
     return _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_iso_utc(s: str) -> _dt.datetime | None:
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            return _dt.datetime.fromisoformat(s[:-1] + "+00:00")
+        return _dt.datetime.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _is_truthy(val: str | None) -> bool:
+    return str(val or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _normalize_secret_candidates(
@@ -117,6 +145,108 @@ def _load_secrets_file(
             if env_value == "\"\"" or env_value == "''":
                 continue
             os.environ[key] = env_value
+
+
+def _read_frontmatter(draft_path: pathlib.Path) -> dict[str, str]:
+    raw = draft_path.read_text(encoding="utf-8", errors="replace")
+    lines = raw.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    out: dict[str, str] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        key = k.strip()
+        val = v.strip()
+        if not key:
+            continue
+        if val.startswith(("\"", "'")) and val.endswith(("\"", "'")) and len(val) >= 2:
+            val = val[1:-1]
+        out[key] = val
+    return out
+
+
+def _text_sha256(text: str) -> str:
+    # Normalize to reduce accidental duplicates due to trailing whitespace.
+    normalized = "\n".join([line.rstrip() for line in text.strip().splitlines()]).strip() + "\n"
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _read_posts_jsonl(root: pathlib.Path) -> list[dict]:
+    posts = root / "workspace" / "state" / "posts.jsonl"
+    if not posts.exists() or not posts.is_file():
+        return []
+    out: list[dict] = []
+    for raw in posts.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            out.append(obj)
+    return out
+
+
+def _require_not_stopped(root: pathlib.Path) -> None:
+    if _is_truthy(os.environ.get("STOP_PUBLISH")):
+        _die("Publishing stopped by STOP_PUBLISH=1.")
+    stop_path = os.environ.get("STOP_PUBLISH_PATH")
+    if stop_path:
+        path = pathlib.Path(stop_path).expanduser()
+    else:
+        path = root / "workspace" / "state" / "STOP_PUBLISH"
+    if path.exists():
+        _die(f"Publishing stopped by kill switch file: {path}")
+
+
+def _require_rate_limits(root: pathlib.Path) -> None:
+    posts = _read_posts_jsonl(root)
+    now = _dt.datetime.now(tz=_dt.timezone.utc)
+
+    max_per_day = int(os.environ.get("MAX_POSTS_PER_DAY", str(DEFAULT_MAX_POSTS_PER_DAY)))
+    min_interval_min = int(os.environ.get("MIN_POST_INTERVAL_MINUTES", str(DEFAULT_MIN_POST_INTERVAL_MINUTES)))
+    min_interval = _dt.timedelta(minutes=max(0, min_interval_min))
+
+    last_post_at: _dt.datetime | None = None
+    count_24h = 0
+
+    for row in posts:
+        ts = row.get("published_at")
+        if not isinstance(ts, str):
+            continue
+        dt = _parse_iso_utc(ts)
+        if dt is None:
+            continue
+        if last_post_at is None or dt > last_post_at:
+            last_post_at = dt
+        if (now - dt) <= _dt.timedelta(hours=24):
+            count_24h += 1
+
+    if max_per_day > 0 and count_24h >= max_per_day:
+        _die(f"Rate limit: already posted {count_24h} times in last 24h (MAX_POSTS_PER_DAY={max_per_day}).")
+
+    if last_post_at is not None and (now - last_post_at) < min_interval:
+        remaining = min_interval - (now - last_post_at)
+        mins = int(remaining.total_seconds() // 60) + 1
+        _die(f"Rate limit: last post too recent. Try again in ~{mins} minutes.")
+
+
+def _require_not_duplicate(root: pathlib.Path, draft_rel: str, text_hash: str) -> None:
+    posts = _read_posts_jsonl(root)
+    for row in posts:
+        if row.get("draft_path") == draft_rel:
+            _die(f"Duplicate: draft already published: {draft_rel}")
+        if row.get("text_sha256") == text_hash:
+            _die("Duplicate: text hash already published.")
+
 
 def _infer_account_root(draft_path: pathlib.Path) -> pathlib.Path:
     current = draft_path.parent
@@ -201,6 +331,30 @@ def _get_access_token() -> str:
     )
 
 
+def _require_auto_mode(root: pathlib.Path, draft_path: pathlib.Path) -> None:
+    if not _is_truthy(os.environ.get("AUTO_PUBLISH")):
+        _die("Auto publish disabled. Set AUTO_PUBLISH=1 to enable.", code=1)
+
+    fm = _read_frontmatter(draft_path)
+    if not _is_truthy(fm.get("auto_publish")):
+        _die("Auto publish refused: draft frontmatter missing `auto_publish: true`.", code=1)
+
+    scheduled_at = _parse_iso_utc(fm.get("scheduled_at", ""))
+    if scheduled_at is None:
+        _die("Auto publish refused: frontmatter missing valid `scheduled_at`.", code=1)
+
+    now = _dt.datetime.now(tz=_dt.timezone.utc)
+    if scheduled_at > now:
+        _die("Auto publish refused: scheduled_at is in the future.", code=1)
+
+    max_late = int(os.environ.get("MAX_LATE_MINUTES", str(DEFAULT_MAX_LATE_MINUTES)))
+    if max_late >= 0 and (now - scheduled_at) > _dt.timedelta(minutes=max_late):
+        _die("Auto publish refused: scheduled_at is too old (MAX_LATE_MINUTES).", code=1)
+
+    _require_not_stopped(root)
+    _require_rate_limits(root)
+
+
 def _post_tweet(text: str, token: str) -> dict:
     url = "https://api.x.com/2/tweets"
     payload = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
@@ -264,6 +418,14 @@ def main() -> int:
              "Takes precedence over inferred ~/.secrets/x-agent-manager/<account> and fallback file.",
     )
     ap.add_argument(
+        "--publish-mode",
+        dest="publish_mode",
+        default=os.environ.get("PUBLISH_MODE", "human"),
+        choices=["human", "auto"],
+        help="Publish mode: human (default) requires approval in workspace/human/messages.md; "
+             "auto requires AUTO_PUBLISH=1 and draft frontmatter flags.",
+    )
+    ap.add_argument(
         "--dry-run",
         action="store_true",
         help="Do all checks and parsing, but do not call the X API.",
@@ -301,11 +463,17 @@ def main() -> int:
         _die(f"Draft must be under {drafts_dir}: {draft_path}")
 
     draft_rel = draft_path.relative_to(account_root).as_posix()
-    _require_approved(account_root, draft_rel)
+    if args.publish_mode == "human":
+        _require_approved(account_root, draft_rel)
 
     text = _read_draft_body(draft_path)
+    text_hash = _text_sha256(text)
     if len(text) > 280:
         print(f"warn: draft text length is {len(text)} (> 280)", file=sys.stderr)
+
+    if args.publish_mode == "auto":
+        _require_auto_mode(account_root, draft_path)
+        _require_not_duplicate(account_root, draft_rel, text_hash)
 
     if args.dry_run:
         print(f"dry_run ok: {draft_rel}")
@@ -324,6 +492,7 @@ def main() -> int:
         "published_at": _utc_now_iso(),
         "draft_path": draft_rel,
         "tweet_id": tweet_id,
+        "text_sha256": text_hash,
         "text": text,
         "response": resp,
     }

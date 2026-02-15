@@ -11,6 +11,9 @@
   - Shared app settings are loaded from `${HOME}/.secrets/x-agent-manager/config`.
   - Account-specific X user tokens are loaded from `${HOME}/.secrets/x-agent-manager/agent-x`.
   - Legacy single-file mode (`${HOME}/.secrets/x-agent-manager`) is still supported.
+- Auto publish (opt-in): set `AUTO_PUBLISH=1` (and keep `MAX_POSTS_PER_DAY` low).
+  - Draft must include frontmatter: `auto_publish: true` and due `scheduled_at`.
+  - Kill switch: create `workspace/state/STOP_PUBLISH` (or set `STOP_PUBLISH=1`).
 
 ## Guardrails
 - Do not publish unless the human explicitly approves it in `workspace/human/messages.md`.

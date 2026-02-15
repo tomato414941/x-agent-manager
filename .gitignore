@@ -3,6 +3,9 @@ node_modules/
 __pycache__/
 *.pyc
 
+accounts/*/workspace/
+accounts/*/logs/
+
 */workspace/state/*.jsonl
 */workspace/memory/*.md
 */workspace/memory/archive/*
@@ -13,5 +16,7 @@ __pycache__/
 */logs/*.log.err
 */logs/*.last_message.txt
 */logs/sessions.log
+
+engineer/
 AGENTS.override.md
 CLAUDE.local.md
