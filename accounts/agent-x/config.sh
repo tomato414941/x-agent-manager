@@ -34,9 +34,13 @@ TIMEOUT_MINUTES=20
 
 # Auto publishing is opt-in. Keep off until you are confident in guardrails.
 : "${AUTO_PUBLISH:=0}"
+: "${AUTO_SCHEDULE:=1}"
+: "${SCHEDULE_TZ:=Asia/Tokyo}"
+: "${SCHEDULE_SLOTS:=07:30,12:10,20:30}"
+: "${SCHEDULE_BUFFER_MINUTES:=10}"
 : "${MAX_POSTS_PER_DAY:=2}"
 : "${MIN_POST_INTERVAL_MINUTES:=180}"
 : "${MAX_LATE_MINUTES:=720}"
 
 # Optional: run a command before Codex starts (e.g., fetch external state).
-: "${AGENT_PRE_CYCLE_CMD:=python3 \"$X_REPO_ROOT/scripts/fetch_metrics.py\" --account-dir \"$X_ACCOUNT_PATH\" && python3 \"$X_REPO_ROOT/scripts/eligibility_tracker.py\" --account-dir \"$X_ACCOUNT_PATH\" && python3 \"$X_REPO_ROOT/scripts/auto_publish.py\" --account-dir \"$X_ACCOUNT_PATH\"}"
+: "${AGENT_PRE_CYCLE_CMD:=python3 \"$X_REPO_ROOT/scripts/fetch_metrics.py\" --account-dir \"$X_ACCOUNT_PATH\" && python3 \"$X_REPO_ROOT/scripts/eligibility_tracker.py\" --account-dir \"$X_ACCOUNT_PATH\" && python3 \"$X_REPO_ROOT/scripts/schedule_drafts.py\" --account-dir \"$X_ACCOUNT_PATH\" && python3 \"$X_REPO_ROOT/scripts/auto_publish.py\" --account-dir \"$X_ACCOUNT_PATH\"}"

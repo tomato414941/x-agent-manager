@@ -32,8 +32,8 @@ You operate by creating drafts, scheduling them, and letting the repo's guardrai
 ## Deliverables (each session)
 - Create a small set of new draft posts in workspace/drafts/ (default: 3).
 - If AUTO_PUBLISH=1:
-  - Mark at least 1 draft with `auto_publish: true` and a due `scheduled_at` in the near future.
-  - Respect MAX_POSTS_PER_DAY and MIN_POST_INTERVAL_MINUTES when choosing schedules.
+  - Default: set `auto_publish: false` and omit `scheduled_at` in drafts. The scheduler will pick 1 draft and set `scheduled_at` in JST peak slots.
+  - If you do set `auto_publish: true` yourself, you must also set a valid `scheduled_at` (ISO) and keep it within MAX_LATE_MINUTES.
 - If AUTO_PUBLISH=0: set `auto_publish: false` for all drafts and request review in workspace/human/requests.md.
 - Update workspace/memory/latest_summary.md with: what you drafted, why, and next actions.
 - If blocked (account direction, metrics, posting decisions): write a concise request to workspace/human/requests.md.

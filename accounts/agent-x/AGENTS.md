@@ -14,6 +14,8 @@
 - Auto publish (opt-in): set `AUTO_PUBLISH=1` (and keep `MAX_POSTS_PER_DAY` low).
   - Draft must include frontmatter: `auto_publish: true` and due `scheduled_at`.
   - Kill switch: create `workspace/state/STOP_PUBLISH` (or set `STOP_PUBLISH=1`).
+- Auto schedule (recommended when auto publish is on): set `AUTO_SCHEDULE=1`.
+  - Schedule config: `SCHEDULE_TZ` and `SCHEDULE_SLOTS` (default: Asia/Tokyo + 07:30,12:10,20:30).
 
 ## Guardrails
 - Do not publish unless the human explicitly approves it in `workspace/human/messages.md`.
