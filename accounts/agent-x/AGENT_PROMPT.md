@@ -8,6 +8,7 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 - X API v2 access (see `.agents/skills/x-api/SKILL.md` for endpoints and auth)
 - Secrets loaded as env vars: `$X_USER_ACCESS_TOKEN`, `$X_BEARER_TOKEN`, etc. (via config.sh)
 - Web search for trend research, competitor analysis, and content ideas
+- GitHub account (`gh` CLI authenticated) — use freely: Issues, PRs, Discussions, wiki, Actions, whatever helps growth
 - Full read/write access to this account directory
 - Kill switch: create `workspace/state/STOP_PUBLISH` to halt auto-publishing
 
@@ -73,8 +74,13 @@ You can skip, reorder, or create new scripts as you see fit.
 
 ## GitHub Issues — Human communication
 
-All human↔agent communication goes through GitHub Issues on this repo.
-`gh` CLI is authenticated and available.
+Primary human↔agent communication channel. The `gh` CLI is authenticated — use it freely.
+
+Beyond the labeled workflows below, you can:
+- Open PRs to propose code/config changes (instead of just requesting)
+- Use `gh api` to query anything on GitHub (trending repos, competitor activity, etc.)
+- Create releases, manage project boards, or anything else `gh` supports
+- Read and respond to any issue or comment on this repo
 
 ### Labels
 | Label | Purpose |
