@@ -76,19 +76,20 @@ You can skip, reorder, or create new scripts as you see fit.
 
 The `gh` CLI is authenticated. Use GitHub freely for anything that helps — it's your primary tool for communication, collaboration, and research.
 
-**Communication with human** — Issues with labels (`draft`, `request`, `report`, `rejected`)
+**Communication with human** — Issues with labels (see below)
 **Code proposals** — Open PRs instead of just requesting changes
 **Research** — `gh api` for trending repos, competitor activity, ecosystem analysis
 **Project management** — Project boards, milestones, releases
 **Anything else** — If `gh` supports it, you can use it
 
 ### Labels
-| Label | Purpose |
-|-------|---------|
-| `draft` | Draft pending human approval |
-| `request` | Human→agent task or question |
-| `report` | Agent→human report, recommendation, or question |
-| `rejected` | Human rejected a draft or request |
+| Label | Direction | Purpose |
+|-------|-----------|---------|
+| `draft` | agent→human | Draft pending human approval |
+| `report` | agent→human | Status report, findings (informational only) |
+| `request` | both | Tasks and asks (human→agent or agent→human) |
+| `approved` | human→agent | Human approved a draft or request |
+| `rejected` | human→agent | Human rejected a draft or request |
 
 ### Draft approval flow
 
@@ -106,7 +107,7 @@ gh issue create \
 
 ---
 
-Close this issue to approve. Add \`rejected\` label to reject.
+Add \`approved\` label to approve. Add \`rejected\` label to reject.
 Comment for feedback before deciding.
 EOF
 )"
@@ -116,28 +117,33 @@ After creating the issue, add `github_issue: <number>` to the draft's frontmatte
 
 **Check for approved drafts (each session):**
 ```bash
-gh issue list --label draft --state closed --json number,title,labels,comments
+gh issue list --label draft,approved --state all --json number,title,labels,comments
 ```
 
-A closed `draft` issue without the `rejected` label = approved.
+A `draft` issue with `approved` label = approved.
 Before publishing, check comments for feedback and revise the draft if needed.
 
 **Publish an approved draft:**
 1. Write the draft relative path to `workspace/human/messages.md` (required by publish_draft.py)
 2. Run `publish_draft.py` as usual
-3. Add a comment to the issue: "Published" with the post URL
+3. Add a comment to the issue: "Published" with the post URL, then close
 
-### Receiving requests from human
+### Requests (bidirectional)
 ```bash
+# Check requests from human
 gh issue list --label request --state open --json number,title,body,comments
 ```
-Read open `request` issues at session start. Work on them, comment progress, close when done.
+- **Human→agent:** Human creates `request` issue. Work on it, comment progress, close when done.
+- **Agent→human:** You create `request` issue for things you need the human to do (follows, bio changes, token fixes, etc.). Human adds `approved`/`rejected` label and comments.
 
-### Sending reports to human
+Keep requests separate from reports — a report is informational, a request needs action.
+
+### Reports (informational)
 ```bash
-gh issue create --title "<summary>" --label report --body "<details>"
+gh issue create --title "[report] <summary>" --label report --body "<details>"
 ```
-Use for: strategy recommendations, metrics analysis, questions needing human input.
+Pure status updates: session results, metrics analysis, findings.
+Do NOT mix action items into reports — create separate `request` issues for those.
 Human will comment or close when acknowledged.
 
 ## Hard constraints
