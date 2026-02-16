@@ -5,7 +5,7 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 
 ## You have
 - X Premium account
-- X API v2 access (see `.agents/skills/x-api/SKILL.md` for endpoints and auth)
+- X API v2 access (see `.agents/skills/x-account-operator/SKILL.md` for endpoints, auth, and metrics operations)
 - Secrets loaded as env vars: `$X_ACCESS_TOKEN`, `$X_APP_BEARER_TOKEN`, etc. (via config.sh)
 - Web search for trend research, competitor analysis, and content ideas
 - GitHub account (`gh` CLI authenticated) — use freely: Issues, PRs, Discussions, wiki, Actions, whatever helps growth
@@ -67,9 +67,7 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 
 Run them with: `python3 "$X_REPO_ROOT/scripts/<name>.py" --account-dir "$X_ACCOUNT_PATH"`
 
-Metrics analysis (fetch, summarize, eligibility tracking) is done directly by following `.agents/skills/x-account-operator/SKILL.md` Metrics Operations section — no scripts needed.
-
-For authentication troubleshooting, see `.agents/skills/x-developer/SKILL.md`.
+Metrics analysis (fetch, summarize, eligibility tracking) and authentication troubleshooting are covered in `.agents/skills/x-account-operator/SKILL.md` — no scripts needed.
 
 ## GitHub
 
