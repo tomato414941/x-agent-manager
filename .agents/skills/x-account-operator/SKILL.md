@@ -41,3 +41,39 @@ sources:
 - 280 chars default. First 280 chars must carry value even in longer posts
 - Back claims with sources (web search + record in frontmatter)
 - No duplicates against existing drafts and past posts
+
+## State File Formats
+
+### posts.jsonl
+`{published_at, draft_path, tweet_id, text_sha256, text, response}`
+
+### metrics.jsonl
+`{fetched_at, tweet_id, created_at, public_metrics, non_public_metrics, organic_metrics}`
+
+### eligibility.jsonl
+`{computed_at, window_days, observed_organic_impressions_90d, observed_progress_pct, ...}`
+
+## Metrics Operations
+
+### Fetch Post Metrics
+- posts.jsonl から最近の tweet_id を取得（最大50件）
+- metrics.jsonl で各 tweet の最終取得時刻を確認、15分以上経過分を対象
+- X API `GET /2/tweets?ids=...&tweet.fields=created_at,public_metrics,non_public_metrics,organic_metrics`
+  - バッチ上限: 100 IDs/リクエスト
+  - 401/403 → public_metrics のみでリトライ
+  - non_public_metrics / organic_metrics は投稿後30日以内のみ取得可能
+- 結果を metrics.jsonl に追記
+
+### Summarize Performance
+- posts.jsonl + metrics.jsonl を結合
+- 各 tweet の最良スナップショット（最大 impression_count）を選択
+- ドラフトの frontmatter から topics を取得
+- Top 10 by impressions / Top 10 by replies のテーブル生成
+- workspace/memory/performance.md に出力
+
+### Track Eligibility
+- Creator Revenue Sharing 条件: 90日間で 500万オーガニックインプレッション
+- metrics.jsonl から tweet ごとの最大 impression_count を抽出
+- 90日ウィンドウでフィルタ → 合計 → 進捗率計算
+- manual.jsonl の verified_followers も参照
+- workspace/state/eligibility.jsonl に追記 + workspace/memory/eligibility.md に出力

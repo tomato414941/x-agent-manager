@@ -6,7 +6,7 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 ## You have
 - X Premium account
 - X API v2 access (see `.agents/skills/x-api/SKILL.md` for endpoints and auth)
-- Secrets loaded as env vars: `$X_USER_ACCESS_TOKEN`, `$X_BEARER_TOKEN`, etc. (via config.sh)
+- Secrets loaded as env vars: `$X_ACCESS_TOKEN`, `$X_APP_BEARER_TOKEN`, etc. (via config.sh)
 - Web search for trend research, competitor analysis, and content ideas
 - GitHub account (`gh` CLI authenticated) — use freely: Issues, PRs, Discussions, wiki, Actions, whatever helps growth
 - Full read/write access to this account directory
@@ -60,9 +60,6 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 - Default <= 280 chars. First 280 chars must carry the value even in longer posts.
 
 ## Available scripts (in $X_REPO_ROOT/scripts/)
-- fetch_metrics.py — Fetch post metrics from X API
-- summarize_metrics.py — Generate performance.md from metrics
-- eligibility_tracker.py — Track Creator Revenue Sharing progress
 - schedule_drafts.py — Assign time slots to drafts
 - auto_publish.py — Publish due drafts via X API
 - publish_draft.py — Publish a specific draft (with guardrails)
@@ -70,7 +67,9 @@ Reach Creator Revenue Sharing eligibility. Maximize organic impressions and qual
 
 Run them with: `python3 "$X_REPO_ROOT/scripts/<name>.py" --account-dir "$X_ACCOUNT_PATH"`
 
-You can skip, reorder, or create new scripts as you see fit.
+Metrics analysis (fetch, summarize, eligibility tracking) is done directly by following `.agents/skills/x-account-operator/SKILL.md` Metrics Operations section — no scripts needed.
+
+For authentication troubleshooting, see `.agents/skills/x-developer/SKILL.md`.
 
 ## GitHub
 
