@@ -37,7 +37,7 @@ source ~/.secrets/x-agent-manager/<account>  # User tokens
 ### Create
 ```bash
 curl -s -X POST "https://api.x.com/2/tweets" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello world"}'
 # 201: {"data": {"id": "...", "text": "..."}}
@@ -46,7 +46,7 @@ curl -s -X POST "https://api.x.com/2/tweets" \
 ### Reply
 ```bash
 curl -s -X POST "https://api.x.com/2/tweets" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "Reply", "reply": {"in_reply_to_tweet_id": "TWEET_ID"}}'
 ```
@@ -54,7 +54,7 @@ curl -s -X POST "https://api.x.com/2/tweets" \
 ### Quote
 ```bash
 curl -s -X POST "https://api.x.com/2/tweets" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "My take:", "quote_tweet_id": "TWEET_ID"}'
 ```
@@ -62,7 +62,7 @@ curl -s -X POST "https://api.x.com/2/tweets" \
 ### With media
 ```bash
 curl -s -X POST "https://api.x.com/2/tweets" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "With image", "media": {"media_ids": ["MEDIA_ID"]}}'
 ```
@@ -70,7 +70,7 @@ curl -s -X POST "https://api.x.com/2/tweets" \
 ### With poll
 ```bash
 curl -s -X POST "https://api.x.com/2/tweets" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text": "Which?", "poll": {"options": ["A", "B"], "duration_minutes": 1440}}'
 ```
@@ -78,25 +78,25 @@ curl -s -X POST "https://api.x.com/2/tweets" \
 ### Delete
 ```bash
 curl -s -X DELETE "https://api.x.com/2/tweets/$TWEET_ID" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### Get by ID
 ```bash
 curl -s "https://api.x.com/2/tweets/$TWEET_ID?tweet.fields=created_at,public_metrics,author_id,entities" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### Search recent (7 days)
 ```bash
 curl -s "https://api.x.com/2/tweets/search/recent?query=QUERY&max_results=10&tweet.fields=created_at,public_metrics,author_id" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### Search full archive
 ```bash
 curl -s "https://api.x.com/2/tweets/search/all?query=QUERY&max_results=10&tweet.fields=created_at,public_metrics" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### Constraints
@@ -109,25 +109,25 @@ curl -s "https://api.x.com/2/tweets/search/all?query=QUERY&max_results=10&tweet.
 ### Authenticated user
 ```bash
 curl -s "https://api.x.com/2/users/me?user.fields=public_metrics,description,created_at,verified_type" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### By username
 ```bash
 curl -s "https://api.x.com/2/users/by/username/$USERNAME?user.fields=public_metrics,description" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### User's posts
 ```bash
 curl -s "https://api.x.com/2/users/$USER_ID/tweets?max_results=10&tweet.fields=created_at,public_metrics" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### User's mentions
 ```bash
 curl -s "https://api.x.com/2/users/$USER_ID/mentions?max_results=10&tweet.fields=created_at,public_metrics,author_id" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ## Follows
@@ -135,7 +135,7 @@ curl -s "https://api.x.com/2/users/$USER_ID/mentions?max_results=10&tweet.fields
 ### Follow
 ```bash
 curl -s -X POST "https://api.x.com/2/users/$MY_USER_ID/following" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"target_user_id": "TARGET_USER_ID"}'
 ```
@@ -143,15 +143,15 @@ curl -s -X POST "https://api.x.com/2/users/$MY_USER_ID/following" \
 ### Unfollow
 ```bash
 curl -s -X DELETE "https://api.x.com/2/users/$MY_USER_ID/following/$TARGET_USER_ID" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ### Get followers / following
 ```bash
 curl -s "https://api.x.com/2/users/$USER_ID/followers?max_results=100&user.fields=public_metrics" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 curl -s "https://api.x.com/2/users/$USER_ID/following?max_results=100&user.fields=public_metrics" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ## Likes
@@ -159,11 +159,11 @@ curl -s "https://api.x.com/2/users/$USER_ID/following?max_results=100&user.field
 ### Like / Unlike
 ```bash
 curl -s -X POST "https://api.x.com/2/users/$MY_USER_ID/likes" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tweet_id": "TWEET_ID"}'
 curl -s -X DELETE "https://api.x.com/2/users/$MY_USER_ID/likes/$TWEET_ID" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 
 ## Blocks & Mutes
@@ -171,12 +171,12 @@ curl -s -X DELETE "https://api.x.com/2/users/$MY_USER_ID/likes/$TWEET_ID" \
 ```bash
 # Block
 curl -s -X POST "https://api.x.com/2/users/$MY_USER_ID/blocking" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"target_user_id": "TARGET_USER_ID"}'
 # Mute
 curl -s -X POST "https://api.x.com/2/users/$MY_USER_ID/muting" \
-  -H "Authorization: Bearer $X_USER_ACCESS_TOKEN" \
+  -H "Authorization: Bearer $X_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"target_user_id": "TARGET_USER_ID"}'
 ```
@@ -185,7 +185,7 @@ curl -s -X POST "https://api.x.com/2/users/$MY_USER_ID/muting" \
 
 ```bash
 curl -s "https://api.x.com/2/trends/by/woeid/$WOEID" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 # Japan: 23424856 | Tokyo: 1118370
 ```
 
@@ -214,6 +214,6 @@ curl -s "https://api.x.com/2/trends/by/woeid/$WOEID" \
 
 ```bash
 curl -s "https://api.x.com/2/tweets/search/recent?query=QUERY&pagination_token=$NEXT_TOKEN" \
-  -H "Authorization: Bearer $X_BEARER_TOKEN"
+  -H "Authorization: Bearer $X_ACCESS_TOKEN"
 ```
 Use `meta.next_token` from response.
