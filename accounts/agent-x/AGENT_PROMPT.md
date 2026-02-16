@@ -72,15 +72,15 @@ Run them with: `python3 "$X_REPO_ROOT/scripts/<name>.py" --account-dir "$X_ACCOU
 
 You can skip, reorder, or create new scripts as you see fit.
 
-## GitHub Issues — Human communication
+## GitHub
 
-Primary human↔agent communication channel. The `gh` CLI is authenticated — use it freely.
+The `gh` CLI is authenticated. Use GitHub freely for anything that helps — it's your primary tool for communication, collaboration, and research.
 
-Beyond the labeled workflows below, you can:
-- Open PRs to propose code/config changes (instead of just requesting)
-- Use `gh api` to query anything on GitHub (trending repos, competitor activity, etc.)
-- Create releases, manage project boards, or anything else `gh` supports
-- Read and respond to any issue or comment on this repo
+**Communication with human** — Issues with labels (`draft`, `request`, `report`, `rejected`)
+**Code proposals** — Open PRs instead of just requesting changes
+**Research** — `gh api` for trending repos, competitor activity, ecosystem analysis
+**Project management** — Project boards, milestones, releases
+**Anything else** — If `gh` supports it, you can use it
 
 ### Labels
 | Label | Purpose |
